@@ -1,0 +1,102 @@
+##Loading the required libraries
+library(readxl)
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(rnaturalearthhires)
+library(rnaturalearth)
+library(tidyr)
+
+
+## Importing the datasets
+#Demographic data
+GROUP5_MPOX_DATA_D <- read_excel("GROUP5.MPOX.DATA.xlsx")
+View(GROUP5_MPOX_DATA_D)
+
+#Spatial Data
+GROUP5_MPOX_DATA_S <- read_excel("GROUP5.MPOX.DATA.xlsx", 
+                               sheet = "SPATIAL_DATA")
+View(GROUP5_MPOX_DATA_S)
+
+
+###load the uganda shapefile data
+uganda_map <- ne_states(country = "Uganda", returnclass = "sf")
+View(uganda_map)
+
+
+### load the lakes shape file data
+uganda_lakes <- st_read("Uganda_Lakes.shx")
+View(uganda_lakes)
+
+## Performing the left join to add cases to the map data
+map_data <- uganda_map %>%
+  left_join(GROUP5_MPOX_DATA_S, by = c("name" = "District"))
+
+##CheckIng the resulting map_data for presence of the added columns
+map_data$`Total Cases`
+map_data$`Total Deaths`
+
+
+##plot a Map of Uganda Highlighting Districts with their Total Cases of MPOX
+ggplot() +
+  geom_sf(data = map_data, aes(fill = `Total Cases`), color = "black") +
+  geom_sf(data = uganda_lakes, fill = "lightblue", color = "lightblue")+
+  geom_sf_text(
+    data = map_data %>% filter(!is.na(`Total Cases`) & `Total Cases` > 0),
+    aes(label = paste0(name, "\n", `Total Cases`, "")),  # Combine district name 
+               size = 2.5 , color = "black", lineheight = 1 , check_overlap = TRUE, fontface = "bold",
+  )+
+  
+  scale_fill_gradientn(
+    colors = c("lightpink", "tomato", "tomato2", "tomato3","darkred"),  
+    values = scales::rescale(c(100,2800)),                     
+    limits = c(100, 2800),
+    na.value = "white",
+    name = "Total Number of MPOX Cases"
+  ) +
+  
+  ggtitle("Map of Uganda Highlighting Districts with their Total Cases of MPOX") +
+  labs(fill = "Total Number of MPOX Cases") +
+  theme_minimal()+
+  theme(panel.grid.major = element_blank(),   # Remove major grid lines
+        panel.grid.minor = element_blank(),
+        axis.line = element_blank(),          # Remove axis lines
+        axis.text = element_blank(),          # Remove axis text
+        axis.ticks = element_blank(),
+        axis.title.x = element_blank(),       # Remove x axis title
+        axis.title.y = element_blank())   # Remove minor grid lines
+
+
+
+##Faceted graph showing Distribution of MPOX Cases by Age Group and Sex
+# Reshaping to long format
+age_long <- GROUP5_MPOX_DATA_D %>%
+  select(`Age Group`, Males, Females) %>%
+  pivot_longer(cols = c(Males, Females), names_to = "Sex", values_to = "Cases")
+
+# Viewing the long data
+print(age_long)
+
+#faceted graph
+ggplot(subset(age_long, `Age Group` != "TOTAL"),
+       aes(x = `Age Group`, y = Cases, fill = Sex)) +
+  geom_col(position = "dodge") +  # side-by-side bars
+  geom_text(aes(label = Cases), 
+            position = position_dodge(width = 0.9), # width matches default bar width
+            vjust = -0.5, 
+            size = 3) +
+  scale_fill_manual(values = c("Males" = "steelblue", "Females" = "tomato")) +
+  labs(
+    title = "Distribution of MPOX Cases by Age Group and Sex",
+    x = "Age Group",
+    y = "Number of Cases"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none",          # Remove legend, since fill matches x-axis
+        panel.grid = element_blank(),       # remove gridlines
+        axis.line = element_line(color = "black"),  # keep axis lines
+        axis.ticks = element_line(color = "black"),  # keep ticks
+        strip.text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+  ) 
+
